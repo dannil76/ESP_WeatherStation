@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include <ota-tftp.h>
+
 // I2C parameters
 #define I2C_BUS 0
 #define SCL_PIN 14
@@ -50,15 +52,18 @@ QueueHandle_t publish_humid_queue;
 QueueHandle_t publish_press_queue;
 QueueHandle_t publish_temp_queue;
 
-#define PUB_MSG_LEN 16
+#define PUB_MSG_LEN 256
+
+bool bmp280_found = false;
+bool ds18b20_found = false;
+bool si7021_found = false;
 
 
-// Humidity measurment task
+// Humidity (and temperature) measurment task
 static void humid_task(void *pvParameters) {
     TickType_t xLastWakeTime = xTaskGetTickCount();
     char msg[PUB_MSG_LEN];
 
-    bool si7021_found = false;
     bool avg_init = false;
 
     float si7021_temperature, si7021_humidity;
@@ -66,6 +71,10 @@ static void humid_task(void *pvParameters) {
     float humidity;
     float humid_sum = 0.0;
     float humid_avg[AVG_TIME / SAMP_INTERVAL];
+
+    float temperature;
+    float temp_sum = 0.0;
+    float temp_avg[AVG_TIME/SAMP_INTERVAL];
 
     int avg_index = 0;
     int i;
@@ -113,9 +122,11 @@ static void humid_task(void *pvParameters) {
         /* Initialize moving average buffers the first time */
         if (!avg_init) {
             humid_sum = si7021_humidity * (AVG_TIME/SAMP_INTERVAL);
+            temp_sum = si7021_temperature * (AVG_TIME/SAMP_INTERVAL);
 
             for (i = 0; i < AVG_TIME/SAMP_INTERVAL; i++) {
                 humid_avg[i] = si7021_humidity;
+                temp_avg[i] = si7021_temperature;
             }
             avg_init = true;
         }
@@ -126,20 +137,34 @@ static void humid_task(void *pvParameters) {
         humid_avg[avg_index] = si7021_humidity;
         humidity = humid_sum / (AVG_TIME/SAMP_INTERVAL);
 
+        temp_sum  -= temp_avg[avg_index];
+        temp_sum  += si7021_temperature;
+        temp_avg[avg_index] = si7021_temperature;
+        temperature = temp_sum / (AVG_TIME/SAMP_INTERVAL);
+
         avg_index++;
         avg_index %= AVG_TIME/SAMP_INTERVAL;  // Wrap
 
-        printf("Temperature:     %.1f C     (SI7021)\n", si7021_temperature);
         printf("Humidity:        %.1f %% Rh  (SI7021)\n", si7021_humidity);
-        printf("Avg humidity:    %.1f %%\n", humidity);
+        printf("Avg humidity:    %.1f %% Rh  (SI7021)\n", humidity);
+        printf("Temperature:     %.1f C     (SI7021)\n", si7021_temperature);
+        printf("Avg temperature: %.1f C     (SI7021)\n", temperature);
         printf("\n");
 
         snprintf(msg, PUB_MSG_LEN, "%.1f", humidity);
         if (xQueueSend(publish_humid_queue, (void *)msg, portMAX_DELAY) == pdFALSE) {
             printf("Humidity publish queue overflow.\n");
         }
+
+        if (!ds18b20_found) {
+            snprintf(msg, PUB_MSG_LEN, "%.1f", temperature);
+            if (xQueueSend(publish_temp_queue, (void *) msg, portMAX_DELAY) == pdFALSE) {
+                printf("Temperature publish queue overflow.\n");
+            }
+        }
     }
 }
+
 
 // Pressure measurment task
 static void press_task(void *pvParameters)
@@ -147,7 +172,6 @@ static void press_task(void *pvParameters)
     TickType_t xLastWakeTime = xTaskGetTickCount();
     char msg[PUB_MSG_LEN];
 
-    bool bmp280_found = false;
     bool avg_init = false;
 
     float bmp280_pressure, bmp280_temperature, bmp280_humidity;
@@ -163,6 +187,7 @@ static void press_task(void *pvParameters)
 
     // Get exclusive access to I2C
     xSemaphoreTake(i2c_lock, portMAX_DELAY);
+
 
     /* BMP280 (pressure) initialization */
     bmp280_params_t  params;
@@ -225,8 +250,8 @@ static void press_task(void *pvParameters)
         avg_index %= AVG_TIME/SAMP_INTERVAL;  // Wrap
 
         printf("Temperature:     %.1f C     (BMP280)\n", bmp280_temperature);
-        printf("Pressure:        %.1f hPa  (BMP280)\n", bmp280_pressure/100.0);
-        printf("Avg pressure:    %.1f hPa\n", pressure/100.0);
+        printf("Pressure:        %4.1f hPa  (BMP280)\n", bmp280_pressure/100.0);
+        printf("Avg pressure:    %4.1f hPa\n", pressure/100.0);
         printf("\n");
 
         snprintf(msg, PUB_MSG_LEN, "%.1f", pressure/100.0);
@@ -236,13 +261,13 @@ static void press_task(void *pvParameters)
     }
 }
 
-// Temperature measurment task
+
+// Temperature (DS18B20) measurment task
 static void temp_task(void *pvParameters)
 {
     TickType_t xLastWakeTime = xTaskGetTickCount();
     char msg[PUB_MSG_LEN];
 
-    bool ds18b20_found = false;
     bool avg_init = false;
 
     float ds18b20_temperature;
@@ -266,7 +291,9 @@ static void temp_task(void *pvParameters)
     // Stop is sensor is not found
     if (!ds18b20_found) {
         printf("No DS18B20 temperature sensors detected!\n");
-        while (1);
+        while (1) {
+            vTaskDelay(10000 / portTICK_PERIOD_MS);  // Sleep for 10 sec
+        }
     }
 
     /* Initialize wakeup timer */
@@ -310,6 +337,7 @@ static void temp_task(void *pvParameters)
         }
     }
 }
+
 
 // MQTT message receiver
 static void topic_received(mqtt_message_data_t *md)
@@ -355,6 +383,7 @@ static const char* get_my_id(void)
 }
 
 
+// MQTT send task
 static void mqtt_task(void *pvParameters)
 {
     int ret = 0;
@@ -414,6 +443,24 @@ static void mqtt_task(void *pvParameters)
 
         char msg[PUB_MSG_LEN - 1] = "\0";
         mqtt_message_t message;
+
+        // Send status message with IP number
+        struct ip_info info;
+
+        sdk_wifi_get_ip_info(STATION_IF, &info);
+        printf("IP: %d.%d.%d.%d\n", IP2STR(&info.ip));
+
+        snprintf(msg, PUB_MSG_LEN, "{\"IP\": %d.%d.%d.%d}", IP2STR(&info.ip));
+
+        message.payload = msg;
+        message.payloadlen = strlen(msg);
+        message.dup = 0;
+        message.qos = MQTT_QOS2;
+        message.retained = 0;
+        ret = mqtt_publish(&client, STATUS_TOPIC, &message);
+        if (ret != MQTT_SUCCESS ){
+            printf("error while publishing status message: %d\n", ret );
+        }
 
         // Loop forever, or at least as long as the MQTT link is up and running
         while(1){
@@ -576,4 +623,7 @@ void user_init(void) {
     xTaskCreate(&humid_task, "humid_task", 1024, NULL, 3, NULL);
     xTaskCreate(&press_task, "press_task", 1024, NULL, 3, NULL);
     xTaskCreate(&temp_task, "temp_task", 1024, NULL, 3, NULL);
+
+    printf("Starting TFTP server...");
+    ota_tftp_init_server(TFTP_PORT);
 }
