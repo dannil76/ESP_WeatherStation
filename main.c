@@ -151,13 +151,13 @@ static void humid_task(void *pvParameters) {
         printf("Avg temperature: %.1f C     (SI7021)\n", temperature);
         printf("\n");
 
-        snprintf(msg, PUB_MSG_LEN, "%.1f", humidity);
+        snprintf(msg, PUB_MSG_LEN, "%.1f", si7021_humidity);
         if (xQueueSend(publish_humid_queue, (void *)msg, portMAX_DELAY) == pdFALSE) {
             printf("Humidity publish queue overflow.\n");
         }
 
         if (!ds18b20_found) {
-            snprintf(msg, PUB_MSG_LEN, "%.1f", temperature);
+            snprintf(msg, PUB_MSG_LEN, "%.1f", si7021_temperature);
             if (xQueueSend(publish_temp_queue, (void *) msg, portMAX_DELAY) == pdFALSE) {
                 printf("Temperature publish queue overflow.\n");
             }
@@ -254,7 +254,7 @@ static void press_task(void *pvParameters)
         printf("Avg pressure:    %4.1f hPa\n", pressure/100.0);
         printf("\n");
 
-        snprintf(msg, PUB_MSG_LEN, "%.1f", pressure/100.0);
+        snprintf(msg, PUB_MSG_LEN, "%.1f", bmp280_pressure/100.0);
         if (xQueueSend(publish_press_queue, (void *)msg, portMAX_DELAY) == pdFALSE) {
             printf("Pressure publish queue overflow.\n");
         }
@@ -331,7 +331,7 @@ static void temp_task(void *pvParameters)
         printf("Avg temperature: %.1f C\n", temperature);
         printf("\n");
 
-        snprintf(msg, PUB_MSG_LEN, "%.1f", temperature);
+        snprintf(msg, PUB_MSG_LEN, "%.1f", ds18b20_temperature);
         if (xQueueSend(publish_temp_queue, (void *)msg, portMAX_DELAY) == pdFALSE) {
             printf("Tempetarure publish queue overflow.\n");
         }
