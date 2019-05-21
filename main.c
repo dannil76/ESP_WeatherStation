@@ -59,7 +59,7 @@ bool ds18b20_found = false;
 bool si7021_found = false;
 
 
-// Humidity (and temperature) measurment task
+// Humidity (and temperature) measurement task
 static void humid_task(void *pvParameters) {
     TickType_t xLastWakeTime = xTaskGetTickCount();
     char msg[PUB_MSG_LEN];
@@ -99,6 +99,13 @@ static void humid_task(void *pvParameters) {
         while (1);
     }
 
+    printf("humid_task waiting for wifi_alive\n");
+    xSemaphoreTake(wifi_alive, portMAX_DELAY);
+    printf("humid_task wifi is alive!\n");
+
+    // Space the measurements apart by 200 ms
+    vTaskDelay(0*200 / portTICK_PERIOD_MS);
+
     /* Initialize wakeup timer */
     xLastWakeTime = xTaskGetTickCount();
 
@@ -118,7 +125,7 @@ static void humid_task(void *pvParameters) {
 
         // Release I2C
         xSemaphoreGive(i2c_lock);
-
+#ifdef AVERAGE
         /* Initialize moving average buffers the first time */
         if (!avg_init) {
             humid_sum = si7021_humidity * (AVG_TIME/SAMP_INTERVAL);
@@ -144,11 +151,15 @@ static void humid_task(void *pvParameters) {
 
         avg_index++;
         avg_index %= AVG_TIME/SAMP_INTERVAL;  // Wrap
-
-        printf("Humidity:        %.1f %% Rh  (SI7021)\n", si7021_humidity);
-        printf("Avg humidity:    %.1f %% Rh  (SI7021)\n", humidity);
+#endif
+        printf("Humidity:        %.1f %%     (SI7021)\n", si7021_humidity);
+#ifdef AVERAGE
+        printf("Avg humidity:    %.1f %%     (SI7021)\n", humidity);
+#endif
         printf("Temperature:     %.1f C     (SI7021)\n", si7021_temperature);
+#ifdef AVERAGE
         printf("Avg temperature: %.1f C     (SI7021)\n", temperature);
+#endif
         printf("\n");
 
         snprintf(msg, PUB_MSG_LEN, "%.1f", si7021_humidity);
@@ -166,7 +177,7 @@ static void humid_task(void *pvParameters) {
 }
 
 
-// Pressure measurment task
+// Pressure measurement task
 static void press_task(void *pvParameters)
 {
     TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -209,6 +220,13 @@ static void press_task(void *pvParameters)
         while (1);
     }
 
+    printf("press_task waiting for wifi_alive\n");
+    xSemaphoreTake(wifi_alive, portMAX_DELAY);
+    printf("press_task wifi is alive!\n");
+
+    // Space the measurements apart by 200 ms
+    vTaskDelay(1*200 / portTICK_PERIOD_MS);
+
     /* Initialize wakeup timer */
     xLastWakeTime = xTaskGetTickCount();
 
@@ -230,6 +248,7 @@ static void press_task(void *pvParameters)
         // Release I2C
         xSemaphoreGive(i2c_lock);
 
+#ifdef AVERAGE
         /* Initialize moving average buffers the first time */
         if (!avg_init) {
             press_sum = bmp280_pressure * (AVG_TIME/SAMP_INTERVAL);
@@ -248,10 +267,13 @@ static void press_task(void *pvParameters)
 
         avg_index++;
         avg_index %= AVG_TIME/SAMP_INTERVAL;  // Wrap
+#endif
 
-        printf("Temperature:     %.1f C     (BMP280)\n", bmp280_temperature);
-        printf("Pressure:        %4.1f hPa  (BMP280)\n", bmp280_pressure/100.0);
+        printf("Pressure:        %4.1f hPa (BMP280)\n", bmp280_pressure/100.0);
+#ifdef AVERAGE
         printf("Avg pressure:    %4.1f hPa\n", pressure/100.0);
+#endif
+        printf("Temperature:     %.1f C     (BMP280)\n", bmp280_temperature);
         printf("\n");
 
         snprintf(msg, PUB_MSG_LEN, "%.1f", bmp280_pressure/100.0);
@@ -262,7 +284,7 @@ static void press_task(void *pvParameters)
 }
 
 
-// Temperature (DS18B20) measurment task
+// Temperature (DS18B20) measurement task
 static void temp_task(void *pvParameters)
 {
     TickType_t xLastWakeTime = xTaskGetTickCount();
@@ -296,6 +318,13 @@ static void temp_task(void *pvParameters)
         }
     }
 
+    printf("temp_task waiting for wifi_alive\n");
+    xSemaphoreTake(wifi_alive, portMAX_DELAY);
+    printf("temp_task wifi is alive!\n");
+
+    // Space the measurements apart by 200 ms
+    vTaskDelay(2*200 / portTICK_PERIOD_MS);
+
     /* Initialize wakeup timer */
     xLastWakeTime = xTaskGetTickCount();
 
@@ -309,6 +338,7 @@ static void temp_task(void *pvParameters)
         /* Get temperature from DS18B20             */
         ds18b20_measure_and_read_multi(DS18B20_GPIO, &ds18b20_addr, 1, &ds18b20_temperature);
 
+#ifdef AVERAGE
         /* Initialize moving average buffers the first time */
         if (!avg_init) {
             temp_sum = ds18b20_temperature * (AVG_TIME/SAMP_INTERVAL);
@@ -326,9 +356,12 @@ static void temp_task(void *pvParameters)
 
         avg_index++;
         avg_index %= AVG_TIME/SAMP_INTERVAL;  // Wrap
+#endif
 
         printf("Temperature:     %.1f C    (DS18B20)\n", ds18b20_temperature);
+#ifdef AVERAGE
         printf("Avg temperature: %.1f C\n", temperature);
+#endif
         printf("\n");
 
         snprintf(msg, PUB_MSG_LEN, "%.1f", ds18b20_temperature);
