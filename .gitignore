@@ -1,3 +1,4 @@
+.vscode
 build
 firmware
 private_config.h
