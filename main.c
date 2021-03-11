@@ -471,8 +471,8 @@ static void mqtt_task(void *pvParameters)
             }
 
             // Wait 50 ms (for LED blink)
-//            vTaskDelay(50 / portTICK_PERIOD_MS);
-//            gpio_write(LED_GPIO, LED_OFF);
+            vTaskDelay(50 / portTICK_PERIOD_MS);
+            gpio_write(LED_GPIO, LED_OFF);
 
             ret = mqtt_yield(&client, 1000);
             if (ret == MQTT_DISCONNECTED)
