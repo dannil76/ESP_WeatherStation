@@ -350,7 +350,6 @@ static const char* get_my_id(void)
     }
     my_id[12] = '\0';
     my_id_done = true;
-    my_id_done = true;
     return my_id;
 }
 
