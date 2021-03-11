@@ -97,7 +97,7 @@ static void humid_task(void *pvParameters) {
         // Sleep
         vTaskDelayUntil(&xLastWakeTime, HUMID_SAMP_INTERVAL / portTICK_PERIOD_MS);
 
-//        printf("Humidity measure\n");
+        // printf("Humidity measure\n");
         /********************************************/
         // Get exclusive access to I2C
         xSemaphoreTake(i2c_lock, portMAX_DELAY);
@@ -191,7 +191,7 @@ static void press_task(void *pvParameters)
         // Sleep 2 sec
         vTaskDelayUntil(&xLastWakeTime, PRESS_SAMP_INTERVAL / portTICK_PERIOD_MS);
 
-//        printf("Pressure measure\n");
+        // printf("Pressure measure\n");
 
         /********************************************/
         /* Get pressure and temperature from BMP280 */
@@ -276,7 +276,7 @@ static void temp_task(void *pvParameters)
         // Sleep 1 sec
         vTaskDelayUntil(&xLastWakeTime, TEMP_SAMP_INTERVAL / portTICK_PERIOD_MS);
 
-//        printf("Temperature measure\n");
+        // printf("Temperature measure\n");
 
         /********************************************/
         /* Get temperature from DS18B20             */
@@ -418,7 +418,7 @@ static void mqtt_task(void *pvParameters)
         // Loop forever, or at least as long as the MQTT link is up and running
         while(1){
             if (xQueueReceive(publish_humid_queue, (void *)msg, 0) == pdTRUE) {
-//                printf("got humidity message to publish\n");
+                // printf("got humidity message to publish\n");
                 message.payload = msg;
                 message.payloadlen = strlen(msg);
                 message.dup = 0;
@@ -436,7 +436,7 @@ static void mqtt_task(void *pvParameters)
             }
 
             if (xQueueReceive(publish_press_queue, (void *)msg, 0) == pdTRUE) {
-//                printf("got pressure message to publish\n");
+                // printf("got pressure message to publish\n");
                 message.payload = msg;
                 message.payloadlen = strlen(msg);
                 message.dup = 0;
@@ -454,7 +454,7 @@ static void mqtt_task(void *pvParameters)
             }
 
             if (xQueueReceive(publish_temp_queue, (void *)msg, 0) == pdTRUE) {
-//                printf("got temperature message to publish\n");
+                // printf("got temperature message to publish\n");
                 message.payload = msg;
                 message.payloadlen = strlen(msg);
                 message.dup = 0;
