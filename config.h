@@ -6,9 +6,9 @@
 #define CONFIG_H
 
 // Sampling interval for Humidity, Temperature and Air Pressure (in milliseconds)
-#define HUMID_SAMP_INTERVAL 3000
-#define PRESS_SAMP_INTERVAL 2000
-#define TEMP_SAMP_INTERVAL  1000
+#define HUMID_SAMP_INTERVAL 20 * 1000
+#define PRESS_SAMP_INTERVAL 10 * 1000
+#define TEMP_SAMP_INTERVAL  5 * 1000
 
 #define HUMID_TOPIC "dml/sensor00001/humidity"
 #define PRESS_TOPIC "dml/sensor00001/pressure"
